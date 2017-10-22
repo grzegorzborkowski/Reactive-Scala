@@ -1,7 +1,7 @@
 package shop
 
 import akka.actor.{ActorSystem, Props}
-import shop.ShopMessages.{ItemAdded}
+import shop.ShopMessages._
 
 object ShopApplication extends App {
 
@@ -10,6 +10,12 @@ object ShopApplication extends App {
     val cart = system.actorOf(Props[Cart])
 
     cart ! ItemAdded("New Item")
+    cart ! ItemAdded("New Item 2")
+    cart ! ItemRemove("New Item")
+    cart ! CheckoutStarted
+    cart ! CheckoutCanceled
+    cart ! CheckoutStarted
+    cart ! CheckoutClosed
 
   }
 }
