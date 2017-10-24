@@ -2,24 +2,12 @@ package shop
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, Timers}
+import akka.actor.{Actor, Props, Timers}
 import akka.event.Logging
 import shop.Cart._
+import shop.ShopMessages.{CheckoutCanceled, CheckoutClosed, CheckoutStarted, ResponseMessage}
 
 import scala.concurrent.duration.FiniteDuration
-
-
-object Cart {
-  case class ItemAdded(item: String)
-  case class ItemRemove(item: String)
-  case class CheckoutStarted()
-  case class CheckoutCanceled()
-  case class CheckoutClosed()
-  case class CartTimerExpired()
-
-  case object CartTimerExpiredKey
-
-}
 
 class Cart extends Actor with Timers {
   val log = Logging(context.system, this)
@@ -30,10 +18,14 @@ class Cart extends Actor with Timers {
   def Empty: Receive = {
     case item: ItemAdded => {
       items = items + item.item
-      context.become(NonEmpty)
       log.info("Cart was empty. Received {}, current state of the cart is: {}", item, items)
+      // sender ! ResponseMessage("Cart was empty. Received " + item)
+      context.become(NonEmpty)
     }
-    case other => log.info("Received unhandled message: {}", other)
+    case other => {
+      log.info("Received unhandled message: {}", other)
+      // sender ! ResponseMessage("Cart is empty. Unhandled message")
+    }
   }
 
   def NonEmpty: Receive = {
@@ -41,6 +33,7 @@ class Cart extends Actor with Timers {
       startCartTimer()
       items = Set.empty
       log.info("Removing the only one item in cart: {} Cart becomes empty", itemRemove)
+      // sender ! ResponseMessage("Removed the only item. Cart becomes empty")
       context.become(Empty)
     }
     case itemRemove: ItemRemove if items.size > 1 && items.contains(itemRemove.item) => {
@@ -54,9 +47,12 @@ class Cart extends Actor with Timers {
       log.info("Received {}, current state of the cart is: {}", itemAdded, items)
     }
     case CheckoutStarted => {
-      // TODO: implement starting a CheckoutActor here
+      val checkoutActor = context.actorOf(Props[Checkout], "CheckoutActor")
       cancelCartTimer()
       log.info("Starting the checkout.")
+      // TODO: how to test that differently?
+      sender ! checkoutActor
+      // sender ! ResponseMessage("CheckoutStarted")
       context.become(InCheckout)
     }
     case CartTimerExpired => {
@@ -65,7 +61,8 @@ class Cart extends Actor with Timers {
       context.become(Empty)
     }
     case other => {
-      log.info ("Currently in NonEmpty state! Received unknown message: {}", other)
+      log.info("Currently in NonEmpty state! Received unknown message: {}", other)
+      // sender ! ResponseMessage("Unhandled message")
     }
   }
 
@@ -93,3 +90,14 @@ class Cart extends Actor with Timers {
 
 }
 
+object Cart {
+
+  case class ItemAdded(item: String)
+
+  case class ItemRemove(item: String)
+
+  case class CartTimerExpired()
+
+  case object CartTimerExpiredKey
+
+}
