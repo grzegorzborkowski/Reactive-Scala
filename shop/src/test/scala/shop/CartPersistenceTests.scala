@@ -27,6 +27,8 @@ class CartPersistenceTests extends
       val cartManagerID = "1"
       val cartActor = system.actorOf(Props(new CartManager(cartManagerID, Cart.empty)))
       cartActor ! ItemAdded(item)
+      cartActor ! GetCartState
+      expectMsg(1)
 
       cartActor ! PoisonPill
 
@@ -34,7 +36,7 @@ class CartPersistenceTests extends
 
       cartActor_2 ! GetCartState
 
-      expectMsg(Empty)
+      expectMsg(1)
     }
   }
 

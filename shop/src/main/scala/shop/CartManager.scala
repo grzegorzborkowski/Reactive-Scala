@@ -3,7 +3,7 @@ package shop
 import java.net.URI
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorRef, Props, Timers}
+import akka.actor.{ActorRef, Props, Timers}
 import akka.event.{Logging, LoggingReceive}
 import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 import shop.CartManager._
@@ -48,6 +48,8 @@ case class Cart(items: Map[URI, Item]) {
       }
     } else (Cart(items), NewState.NonEmpty)
   }
+
+  def size: Int = items.size
 }
 
 object Cart {
@@ -69,13 +71,16 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
         event =>
           shoppingCart = shoppingCart.addItem(item.item)
           customer = context.sender
-          log.info("Cart was empty. Received {}, current state of the cart is: {}", item, shoppingCart)
+          saveSnapshot(shoppingCart)
+          log.info("\nCart was empty. Received {}, current state of the cart is: {}", item, shoppingCart)
           context.become(NonEmpty)
       }
-
+    }
+    case GetCartState => {
+      sender ! shoppingCart.size
     }
     case other => {
-      log.info("Received unhandled message: {}", other)
+      log.info("Received unhandled message in Empty state: {}", other)
     }
   }
 
@@ -108,7 +113,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       context.become(Empty)
     }
     case GetCartState => {
-      sender ! shoppingCart
+      sender ! shoppingCart.size
     }
 
     case other => {
@@ -127,6 +132,9 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       shoppingCart = Cart.empty
       context.become(Empty)
     }
+    case GetCartState => {
+      sender ! shoppingCart.size
+    }
     case other => log.info("Currently in InCheckout state! Received unknown message: {}", other)
   }
 
@@ -140,7 +148,10 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
 
   override def receiveRecover: Receive = LoggingReceive {
     case RecoveryCompleted => log.info("Recovery completed!")
-    case SnapshotOffer(_, snapshot: Cart) => shoppingCart = snapshot
+    case SnapshotOffer(_, snapshot: Cart) => {
+      shoppingCart = snapshot
+      log.info("Recovered cart state: " + shoppingCart.toString)
+    }
     case other => log.info("other: " + other)
   }
 
