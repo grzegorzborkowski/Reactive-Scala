@@ -16,35 +16,44 @@ case class Item(id: URI, name: String, price: BigDecimal, count: Int)
 case class Cart(items: Map[URI, Item]) {
 
   def addItem(item: Item): Cart = {
-      val itemsUpdated = items + (item.id -> Item(item.id, item.name, item.price, item.count+1))
-      Cart(itemsUpdated)
+    val currentCount = if (items contains item.id) items(item.id).count else 0
+    var itemsUpdated: Map[URI, Item] = Map.empty
+    if (currentCount == 0) {
+      itemsUpdated = items + (item.id -> Item(item.id, item.name, item.price, item.count))
+    } else {
+      itemsUpdated = items + (item.id -> Item(item.id, item.name, item.price, item.count + 1))
     }
-    def removeItem(item: Item, count: Int): (Cart, NewState) = {
-      val currentCount = if (items contains item.id) items(item.id).count else 0
-      if (currentCount != 0) {
-          val newCount = item.count - count
-          newCount match {
-            case 0 => {
-              val newItemsMap = items + (item.id -> Item(item.id, item.name, item.price, 0))
-              (Cart(newItemsMap), NewState.Empty)
-            }
-            case newCount if newCount>0 => {
-              val newItemsMap = items + (item.id -> Item(item.id, item.name, item.price, newCount))
-              (Cart(newItemsMap), NewState.NonEmpty)
-            }
-            case newCount if newCount < 0 => {
-              (Cart(items), NewState.NonEmpty)
-            }
-          }
-      } else (Cart(items), NewState.NonEmpty)
-    }
+    Cart(itemsUpdated)
+  }
+
+  def removeItem(item: Item, count: Int): (Cart, NewState) = {
+    val currentCount = if (items contains item.id) items(item.id).count else 0
+    if (currentCount != 0) {
+      val newCount = item.count - count
+      newCount match {
+        case 0 => {
+          val newItemsMap = items + (item.id -> Item(item.id, item.name, item.price, 0))
+          (Cart(newItemsMap), NewState.Empty)
+        }
+        case newCount if newCount > 0 => {
+          val newItemsMap = items + (item.id -> Item(item.id, item.name, item.price, newCount))
+          (Cart(newItemsMap), NewState.NonEmpty)
+        }
+        case newCount if newCount < 0 => {
+          println("Jestem tu")
+          println("Items in newCount < 0" + items)
+          (Cart(items), NewState.NonEmpty)
+        }
+      }
+    } else (Cart(items), NewState.NonEmpty)
+  }
 }
 
 object Cart {
   val empty = Cart(Map.empty)
 }
 
-class CartManager(var shoppingCart : Cart) extends Actor with Timers {
+class CartManager(var shoppingCart: Cart) extends Actor with Timers {
   def this() = this(Cart.empty)
 
   val log = Logging(context.system, this)

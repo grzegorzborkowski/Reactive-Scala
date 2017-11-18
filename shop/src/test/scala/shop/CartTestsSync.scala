@@ -1,5 +1,7 @@
 package shop
 
+import java.net.URI
+
 import akka.actor.ActorSystem
 import akka.testkit.{TestActorRef, TestKit}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, WordSpecLike}
@@ -43,6 +45,24 @@ class CartTestsSync extends TestKit(ActorSystem("CartTests"))  with WordSpecLike
         !actor.shoppingCart.items.contains(new java.net.URI("First_Item")))
     }
 
-}
+
+    "Do not remove items when remove count is greater than current state" in {
+      val actorRef = TestActorRef[CartManager]
+      val actor = actorRef.underlyingActor
+
+      actorRef ! ItemAdded(Item(new URI("First_Item"), "First Item", 10, 1))
+      actorRef ! ItemRemove(Item(new URI("First_Item"), "First Item", 10, 1), 2)
+
+
+      println(actor.shoppingCart.items(new URI("First_Item")))
+      assert (actor.shoppingCart.items.size == 1 &&
+              actor.shoppingCart.items.contains(new URI("First_Item")) &&
+              actor.shoppingCart.items(new URI("First_Item")).count == 1)
+
+
+    }
+
+
+  }
 
 }
