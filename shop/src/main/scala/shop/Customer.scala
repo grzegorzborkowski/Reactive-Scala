@@ -7,7 +7,7 @@ import shop.ShopMessages.{CheckoutStarted, ItemAdded}
 
 class Customer extends Actor {
   val log = Logging(context.system, this)
-  val cartActorRef: ActorRef = context.actorOf(Props[Cart], name = "Cart")
+  val cartActorRef: ActorRef = context.actorOf(Props[CartManager], name = "Cart")
   var checkoutRef: ActorRef = _
   var paymentServiceRef: ActorRef = _
 

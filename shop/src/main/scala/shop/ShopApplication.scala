@@ -1,7 +1,7 @@
 package shop
 
 import akka.actor.{ActorRef, ActorSystem, Props}
-import shop.Cart._
+import shop.CartManager._
 import shop.ShopMessages.{CheckoutStarted, ItemAdded}
 import akka.pattern.ask
 import akka.util.Timeout
@@ -14,18 +14,13 @@ object ShopApplication extends App {
 
   override def main(args: Array[String]): Unit = {
     val system = ActorSystem("ShopApplication")
-    val cart = system.actorOf(Props[Cart], name = "CartActor")
+    val cart = system.actorOf(Props[CartManager], name = "CartActor")
     implicit val waitForCheckoutRefTimeout = Timeout(5 seconds)
 
-    cart ! ItemAdded("New Item")
-    cart ! ItemAdded("New Item 2")
-    cart ! ItemRemove("New Item")
-
+    val uri = new java.net.URI("1")
+    cart ! ItemAdded(Item(uri, "New Item", 10.0, 1))
 
     Thread.sleep(10000)
-    cart ! ItemAdded("New Item")
-    cart ! ItemAdded("New Item 2")
-    cart ! ItemRemove("New Item")
 
     val checkout = Await.result(cart ? CheckoutStarted, waitForCheckoutRefTimeout.duration).asInstanceOf[ActorRef]
 
