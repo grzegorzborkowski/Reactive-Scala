@@ -5,8 +5,7 @@ import java.net.URI
 import akka.actor.ActorSystem
 import akka.testkit.{TestActorRef, TestKit}
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, WordSpecLike}
-import shop.CartManager.ItemRemove
-import shop.ShopMessages.ItemAdded
+import shop.CartManager.{ItemAdded, ItemRemove}
 
 class CartTestsSync extends TestKit(ActorSystem("CartTests"))  with WordSpecLike
   with BeforeAndAfterEach with BeforeAndAfterAll {

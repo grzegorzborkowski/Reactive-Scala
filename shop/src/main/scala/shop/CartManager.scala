@@ -4,7 +4,8 @@ import java.net.URI
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorRef, Props, Timers}
-import akka.event.Logging
+import akka.event.{Logging, LoggingReceive}
+import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 import shop.CartManager._
 import shop.NewState.NewState
 import shop.ShopMessages._
@@ -53,8 +54,8 @@ object Cart {
   val empty = Cart(Map.empty)
 }
 
-class CartManager(var shoppingCart: Cart) extends Actor with Timers {
-  def this() = this(Cart.empty)
+class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor with Timers {
+  def this() = this("123", Cart.empty)
 
   val log = Logging(context.system, this)
   val checkout: ActorRef = context.actorOf(Props[Checkout], "checkout")
@@ -64,10 +65,14 @@ class CartManager(var shoppingCart: Cart) extends Actor with Timers {
 
   def Empty: Receive = {
     case item: ItemAdded => {
-      shoppingCart = shoppingCart.addItem(item.item)
-      customer = context.sender
-      log.info("Cart was empty. Received {}, current state of the cart is: {}", item, shoppingCart)
-      context.become(NonEmpty)
+      persist(item.item) {
+        event =>
+          shoppingCart = shoppingCart.addItem(item.item)
+          customer = context.sender
+          log.info("Cart was empty. Received {}, current state of the cart is: {}", item, shoppingCart)
+          context.become(NonEmpty)
+      }
+
     }
     case other => {
       log.info("Received unhandled message: {}", other)
@@ -102,6 +107,10 @@ class CartManager(var shoppingCart: Cart) extends Actor with Timers {
       shoppingCart = Cart.empty
       context.become(Empty)
     }
+    case GetCartState => {
+      sender ! shoppingCart
+    }
+
     case other => {
       log.info("Currently in NonEmpty state! Received unknown message: {}", other)
     }
@@ -129,15 +138,33 @@ class CartManager(var shoppingCart: Cart) extends Actor with Timers {
     timers.cancel(CartTimerExpiredKey)
   }
 
+  override def receiveRecover: Receive = LoggingReceive {
+    case RecoveryCompleted => log.info("Recovery completed!")
+    case SnapshotOffer(_, snapshot: Cart) => shoppingCart = snapshot
+    case other => log.info("other: " + other)
+  }
+
+  override def receiveCommand: Receive = Empty
+
+  override def persistenceId = id
 }
 
 object CartManager {
+
+  sealed trait Event
+
+  case class ItemAddedEvent(item: Item) extends Event
+  case class ItemRemovedEvent(item: Item) extends Event
+
+  case class ItemAdded(item: Item)
 
   case class ItemRemove(item: Item, count: Int)
 
   case class CartTimerExpired()
 
   case object CartTimerExpiredKey
+
+  case class GetCartState()
 
 }
 

@@ -5,7 +5,8 @@ import java.net.URI
 import akka.actor.{ActorSystem, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import org.scalatest.{BeforeAndAfterAll, WordSpecLike}
-import shop.ShopMessages.{CheckoutStarted, ItemAdded}
+import shop.CartManager.ItemAdded
+import shop.ShopMessages.CheckoutStarted
 
 class CartTestAsync extends TestKit(ActorSystem("CartTestAsync"))
   with WordSpecLike with BeforeAndAfterAll with ImplicitSender {

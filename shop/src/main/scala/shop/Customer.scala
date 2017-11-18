@@ -2,8 +2,9 @@ package shop
 
 import akka.actor.{Actor, ActorRef, Props}
 import akka.event.Logging
+import shop.CartManager.ItemAdded
 import shop.Checkout.PaymentServiceStarted
-import shop.ShopMessages.{CheckoutStarted, ItemAdded}
+import shop.ShopMessages.CheckoutStarted
 
 class Customer extends Actor {
   val log = Logging(context.system, this)

@@ -2,7 +2,7 @@ package shop
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import shop.CartManager._
-import shop.ShopMessages.{CheckoutStarted, ItemAdded}
+import shop.ShopMessages.CheckoutStarted
 import akka.pattern.ask
 import akka.util.Timeout
 import shop.Checkout.{DeliveryMethodSelected, PaymentSelected, PaymentReceived}
