@@ -2,10 +2,10 @@ package shop
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import shop.Cart._
-import shop.ShopMessages.CheckoutStarted
+import shop.ShopMessages.{CheckoutStarted, ItemAdded}
 import akka.pattern.ask
 import akka.util.Timeout
-import shop.Checkout.{DeliverySelected, PaymentMethod, PaymentReceived}
+import shop.Checkout.{DeliveryMethodSelected, PaymentSelected, PaymentReceived}
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -29,9 +29,9 @@ object ShopApplication extends App {
 
     val checkout = Await.result(cart ? CheckoutStarted, waitForCheckoutRefTimeout.duration).asInstanceOf[ActorRef]
 
-    checkout ! DeliverySelected
+    checkout ! DeliveryMethodSelected
 
-    checkout ! PaymentMethod
+    checkout ! PaymentSelected
 
     checkout ! PaymentReceived
   }

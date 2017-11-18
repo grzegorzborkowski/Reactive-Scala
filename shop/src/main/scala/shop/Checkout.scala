@@ -2,7 +2,7 @@ package shop
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorRef, Timers}
+import akka.actor.{Actor, ActorRef, Props, Timers}
 import akka.event.Logging
 import shop.Checkout._
 import shop.ShopMessages.{CheckoutCanceled, CheckoutClosed}
@@ -12,6 +12,9 @@ import scala.concurrent.duration.FiniteDuration
 class Checkout extends Actor with Timers {
   val log = Logging(context.system, this)
   val CartRef: ActorRef = context.parent
+  var PaymentServiceRef: ActorRef = _
+  var customerRef: ActorRef = _
+
 
   override def receive: Receive = SelectingDelivery
 
@@ -30,19 +33,23 @@ class Checkout extends Actor with Timers {
       CartRef ! CheckoutCanceled
       context.stop(self)
     }
-    case DeliverySelected => {
+    case DeliveryMethodSelected => {
+      customerRef = sender
       log.info("Delivery method has been selected")
+      timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
       context.become(SelectingPaymentMethod)
     }
     case other => {
-      log.info("Unhandled message")
+      log.info("Unhandled message" + other)
     }
   }
 
   def SelectingPaymentMethod: Receive = {
-    case PaymentMethod => {
+    case PaymentSelected => {
       log.info("Selecting payment method")
+      this.PaymentServiceRef = context.actorOf(Props[PaymentService], "PaymentService")
       timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
+      customerRef ! PaymentServiceStarted(PaymentServiceRef)
       context.become(ProcesingPayment)
     }
     case SelectingPaymentMethodCanceled => {
@@ -52,13 +59,13 @@ class Checkout extends Actor with Timers {
       context.stop(self)
     }
     case PaymentTimeout => {
-      log.info("Received payment method")
+      log.info("Received payment tiemeout!")
       timers.cancelAll()
       CartRef ! CheckoutCanceled
       context.stop(self)
     }
     case other => {
-      log.info("Unhandled message")
+      log.info("Unhandled message " + other)
     }
   }
 
@@ -90,13 +97,17 @@ class Checkout extends Actor with Timers {
 
 object Checkout {
   case class CheckoutTimeout()
-  case class DeliverySelected()
-  case class PaymentMethod(method: String)
+  case class DeliveryMethodSelected()
+  case class PaymentSelected(method: String)
   case class SelectingPaymentMethodCanceled()
   case class PaymentReceived()
   case class PaymentTimeout()
   case class PaymentCanceled()
 
+  case class PaymentServiceStarted(paymentServiceRef: ActorRef)
+
   case object CheckoutTimerKey
   case object PaymentTimerKey
+
+
 }
