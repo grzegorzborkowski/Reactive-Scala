@@ -4,7 +4,7 @@ import java.net.URI
 
 import akka.actor.{ActorSystem, PoisonPill, Props}
 import akka.testkit.{ImplicitSender, TestKit}
-import org.scalatest.{Matchers, WordSpecLike}
+import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
 import shop.CartManager.{GetCartState, ItemAdded, ItemRemove}
 
 import scala.util.Random
@@ -14,7 +14,13 @@ class CartPersistenceTests extends
   TestKit(ActorSystem("CartPersistenceSystem"))
   with WordSpecLike
   with Matchers
-  with ImplicitSender {
+  with ImplicitSender
+  with BeforeAndAfterAll
+{
+
+  override def afterAll(): Unit = {
+    system.terminate()
+  }
 
   "Cart" should {
     val first_item = Item(new URI("Uri-1"), "First-Item", 10, 1)

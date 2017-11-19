@@ -69,6 +69,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case item: ItemAdded => {
       persist(item) {
         event => {
+          persistTimer(false)
           startCartTimer()
           log.info("Currently empty. Current state of the cart:" + shoppingCart)
           shoppingCart = shoppingCart.addItem(item.item)
@@ -91,6 +92,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case itemRemove: ItemRemove => {
       persist(itemRemove) {
         event => {
+          persistTimer(false)
           startCartTimer()
           val resultTuple = shoppingCart.removeItem(itemRemove.item, itemRemove.count)
           shoppingCart = resultTuple._1
@@ -107,6 +109,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case itemAdded: ItemAdded => {
       persist(itemAdded) {
         event => {
+          persistTimer(false)
           startCartTimer()
           log.info("Currently non empty. Current state of the cart:" + shoppingCart)
           shoppingCart = shoppingCart.addItem(itemAdded.item)
@@ -118,6 +121,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     }
     case StartCheckOut => {
       cancelCartTimer()
+      persistTimer(true)
       log.info("Starting the checkout[inCart].")
       log.info(customer.toString())
       customer ! ShopMessages.CheckoutStarted(checkout)
@@ -142,6 +146,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case CheckoutCanceled => {
       log.info("Received the checkout cancelled message")
       startCartTimer()
+      persistTimer(false)
       context.become(NonEmpty)
     }
     case CheckoutClosed => {
@@ -161,6 +166,15 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
 
   def cancelCartTimer(): Unit = {
     timers.cancel(CartTimerExpiredKey)
+  }
+
+  def persistTimer(canceled: Boolean): Unit = {
+    val currentTime = if (canceled) -1 else System.currentTimeMillis()
+    persist(TimePersistence(currentTime)) {
+      event => {
+        log.info("Persistence time " + event)
+      }
+    }
   }
 
   override def receiveRecover: Receive = LoggingReceive {
@@ -203,6 +217,10 @@ object CartManager {
   case object CartTimerExpiredKey
 
   case class GetCartState()
+
+  case class persistTimer(startDuration: FiniteDuration)
+
+  case class TimePersistence(timerStart: Long)
 
 }
 
