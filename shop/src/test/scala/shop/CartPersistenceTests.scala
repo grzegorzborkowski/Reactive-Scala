@@ -75,12 +75,14 @@ class CartPersistenceTests extends
       firstActor ! ItemAdded(second_item)
       firstActor ! ItemRemove(first_item, 1)
 
+      firstActor ! GetCartState
+      expectMsg(expectedCart)
+
       firstActor ! PoisonPill
 
       val secondActor = system.actorOf(Props(new CartManager(cartManagerID, Cart.empty)))
 
       secondActor ! GetCartState
-
       expectMsg(expectedCart)
     }
   }

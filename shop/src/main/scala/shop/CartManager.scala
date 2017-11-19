@@ -34,7 +34,7 @@ case class Cart(items: Map[URI, Item]) {
       val newCount = item.count - count
       newCount match {
         case 0 => {
-          val newItemsMap = items + (item.id -> Item(item.id, item.name, item.price, 0))
+          val newItemsMap = items.filterKeys(_ != item.id)
           (Cart(newItemsMap), NewState.Empty)
         }
         case newCount if newCount > 0 => {
