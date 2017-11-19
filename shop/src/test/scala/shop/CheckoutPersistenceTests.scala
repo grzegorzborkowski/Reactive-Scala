@@ -8,7 +8,11 @@ import shop.Checkout.{DeliveryMethodSelected, GetState, PaymentSelected}
 class CheckoutPersistenceTests extends TestKit(ActorSystem("CheckoutPersistenceTests"))
   with WordSpecLike with Matchers with ImplicitSender with BeforeAndAfterAll {
 
-  "Checkout" should {
+  override def afterAll(): Unit = {
+    system.terminate()
+  }
+
+    "Checkout" should {
     "Recover properly when in SelectingDelivery state" in {
       val parentCart = TestProbe()
       val childCheckout = parentCart.childActorOf(Props[Checkout])

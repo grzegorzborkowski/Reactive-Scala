@@ -15,8 +15,7 @@ class CartPersistenceTimersTests extends
   with WordSpecLike
   with Matchers
   with ImplicitSender
-  with BeforeAndAfterAll
-{
+  with BeforeAndAfterAll {
 
   override def afterAll(): Unit = {
     system.terminate()
@@ -26,23 +25,20 @@ class CartPersistenceTimersTests extends
     val first_item = Item(new URI("Uri-1"), "First-Item", 10, 1)
 
     "Checkout timer retains its time after actor restart" in {
-        val parentCart = TestProbe()
+      val parentCart = TestProbe()
 
-        val cartManagerID = new Random(System.currentTimeMillis).alphanumeric.take(10).mkString
-          val firstActor = parentCart.childActorOf(Props(new CartManager(cartManagerID, Cart.empty)))
-          //val firstActor = system.actorOf(Props(new CartManager(cartManagerID, Cart.empty)))
+      val cartManagerID = new Random(System.currentTimeMillis).alphanumeric.take(10).mkString
+      val firstActor = parentCart.childActorOf(Props(new CartManager(cartManagerID, Cart.empty)))
 
-        firstActor ! ItemAdded(first_item)
+      firstActor ! ItemAdded(first_item)
 
-        Thread.sleep(3000)
+      Thread.sleep(3000)
 
-        firstActor ! PoisonPill
+      firstActor ! PoisonPill
 
-        parentCart.childActorOf(Props(new CartManager(cartManagerID, Cart.empty)))
-        parentCart.expectMsg(3 seconds, CartTimerExpired)
-      }
+      parentCart.childActorOf(Props(new CartManager(cartManagerID, Cart.empty)))
+      parentCart.expectMsg(3 seconds, CartTimerExpired)
+    }
   }
-
-  //val childCheckout = parentCart.childActorOf(Props[Checkout])
 
 }
