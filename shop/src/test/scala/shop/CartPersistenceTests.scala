@@ -14,13 +14,7 @@ class CartPersistenceTests extends
   TestKit(ActorSystem("CartPersistenceSystem"))
   with WordSpecLike
   with Matchers
-  with BeforeAndAfterAll
-  with ImplicitSender
-  with BeforeAndAfterEach
-{
-  override def afterAll: Unit = {
-    TestKit.shutdownActorSystem(system)
-  }
+  with ImplicitSender {
 
   "Cart" should {
     val first_item = Item(new URI("Uri-1"), "First-Item", 10, 1)
@@ -30,7 +24,7 @@ class CartPersistenceTests extends
       // TODO: how to fix that test, so that the when we run the same
       // TODO: test with the same actorID, the first actor doesn't recover its state
       val cartManagerID = new Random(System.currentTimeMillis).alphanumeric.take(10).mkString
-      println (cartManagerID)
+      println(cartManagerID)
       val cartActor = system.actorOf(Props(new CartManager(cartManagerID, Cart.empty)))
 
       cartActor ! ItemAdded(first_item)

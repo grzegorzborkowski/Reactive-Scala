@@ -67,7 +67,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
 
   def Empty: Receive = {
     case item: ItemAdded => {
-      persist(item.item) {
+      persist(item) {
         event =>
           log.info("Currently empty. Current state of the cart:" + shoppingCart)
           shoppingCart = shoppingCart.addItem(item.item)
@@ -87,18 +87,23 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
 
   def NonEmpty: Receive = {
     case itemRemove: ItemRemove => {
-      startCartTimer()
-      val resultTuple = shoppingCart.removeItem(itemRemove.item, itemRemove.count)
-      shoppingCart = resultTuple._1
-      val state = resultTuple._2
-      log.info("Received ItemRemove message: {}. Current state of the cart:", itemRemove, shoppingCart)
-      state match {
-        case NewState.Empty => context.become(Empty)
-        case NewState.NonEmpty =>
+      persist(itemRemove) {
+        event => {
+          startCartTimer()
+          val resultTuple = shoppingCart.removeItem(itemRemove.item, itemRemove.count)
+          shoppingCart = resultTuple._1
+          val state = resultTuple._2
+          saveSnapshot(shoppingCart)
+          log.info("Received ItemRemove message: {}. Current state of the cart:", itemRemove, shoppingCart)
+          state match {
+            case NewState.Empty => context.become(Empty)
+            case NewState.NonEmpty =>
+          }
+        }
       }
     }
     case itemAdded: ItemAdded => {
-      persist(itemAdded.item) {
+      persist(itemAdded) {
         event =>
           log.info("Currently non empty. Current state of the cart:" + shoppingCart)
           shoppingCart = shoppingCart.addItem(itemAdded.item)
@@ -159,8 +164,15 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       shoppingCart = snapshot
       log.info("Recovered cart state: " + shoppingCart.toString)
     }
-    case item: Item =>
-      shoppingCart = shoppingCart.addItem(item)
+    case item: ItemAdded => {
+      log.info("Receive Recoever ItemAdde!")
+      shoppingCart = shoppingCart.addItem(item.item)
+    }
+    case item: ItemRemove => {
+      log.info("Receive Recover ItemRemove")
+      val tuple = shoppingCart.removeItem(item.item, item.count)
+      shoppingCart = tuple._1
+    }
     case other =>
       log.info("Message received in receiveRecover: " + other)
   }
