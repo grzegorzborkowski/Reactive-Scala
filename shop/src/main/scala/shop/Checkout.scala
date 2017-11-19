@@ -21,7 +21,6 @@ class Checkout(id: String) extends PersistentActor with Timers {
   var PaymentServiceRef: ActorRef = _
   var customerRef: ActorRef = _
   var checkoutState = CheckoutState(SelectingDeliveryState())
-  persistState(SelectingDeliveryState())
 
   override def receive: Receive = SelectingDelivery
 
@@ -44,7 +43,7 @@ class Checkout(id: String) extends PersistentActor with Timers {
       customerRef = sender
       log.info("Delivery method has been selected")
       timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
-      persistState(SelectingPaymentMethodState())
+      persist(SelectingPaymentMethodState())(persistState)
       context.become(SelectingPaymentMethod)
     }
     case GetState => {
@@ -61,7 +60,7 @@ class Checkout(id: String) extends PersistentActor with Timers {
       this.PaymentServiceRef = context.actorOf(Props[PaymentService], "PaymentService")
       timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
       customerRef ! PaymentServiceStarted(PaymentServiceRef)
-      persistState(ProcessingPaymentState())
+      persist(ProcessingPaymentState())(persistState)
       context.become(ProcesingPayment)
     }
     case SelectingPaymentMethodCanceled => {
@@ -114,6 +113,7 @@ class Checkout(id: String) extends PersistentActor with Timers {
   def persistState(state: PossibleCheckoutState): Unit = {
     checkoutState = CheckoutState(state)
     saveSnapshot(checkoutState)
+    log.info("\n\n Saved state snapshot " + state.getClass + "\n\n")
   }
 
   override def receiveRecover: Receive = LoggingReceive {
@@ -127,6 +127,9 @@ class Checkout(id: String) extends PersistentActor with Timers {
         case ProcessingPaymentState() => context become ProcesingPayment
       }
     }
+    case SnapshotOffer(_, snapshot: Any) => {
+      log.info("Snapshot!")
+    }
   }
 
   override def receiveCommand: Receive = SelectingDelivery
@@ -135,6 +138,8 @@ class Checkout(id: String) extends PersistentActor with Timers {
 }
 
 object Checkout {
+  def props(id: String): Props = Props(new Checkout(id))
+
   case class CheckoutTimeout()
   case class DeliveryMethodSelected()
   case class PaymentSelected(method: String)
