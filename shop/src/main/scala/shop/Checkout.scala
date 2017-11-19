@@ -15,7 +15,6 @@ class Checkout extends Actor with Timers {
   var PaymentServiceRef: ActorRef = _
   var customerRef: ActorRef = _
 
-
   override def receive: Receive = SelectingDelivery
 
   timers.startSingleTimer(CheckoutTimerKey, CheckoutTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
@@ -38,6 +37,9 @@ class Checkout extends Actor with Timers {
       log.info("Delivery method has been selected")
       timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
       context.become(SelectingPaymentMethod)
+    }
+    case GetState => {
+      sender ! SelectingDeliveryState
     }
     case other => {
       log.info("Unhandled message" + other)
@@ -64,6 +66,9 @@ class Checkout extends Actor with Timers {
       CartRef ! CheckoutCanceled
       context.stop(self)
     }
+    case GetState => {
+      sender ! SelectingPaymentMethodState
+    }
     case other => {
       log.info("Unhandled message " + other)
     }
@@ -88,10 +93,15 @@ class Checkout extends Actor with Timers {
       CartRef ! CheckoutCanceled
       context.stop(self)
     }
+    case GetState => {
+      sender ! ProcessingPaymentState
+    }
     case other => {
       log.info("Unhandled message!")
     }
   }
+
+//  def persistState():
 
 }
 
@@ -109,5 +119,11 @@ object Checkout {
   case object CheckoutTimerKey
   case object PaymentTimerKey
 
+  sealed trait CheckoutState
+  case class SelectingDeliveryState() extends CheckoutState
+  case class SelectingPaymentMethodState() extends CheckoutState
+  case class ProcessingPaymentState() extends CheckoutState
+
+  case class GetState()
 
 }
