@@ -11,6 +11,7 @@ import shop.NewState.NewState
 import shop.ShopMessages._
 
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Random
 
 case class Item(id: URI, name: String, price: BigDecimal, count: Int)
 
@@ -41,8 +42,6 @@ case class Cart(items: Map[URI, Item]) {
           (Cart(newItemsMap), NewState.NonEmpty)
         }
         case newCount if newCount < 0 => {
-          println("Jestem tu")
-          println("Items in newCount < 0" + items)
           (Cart(items), NewState.NonEmpty)
         }
       }
@@ -57,7 +56,8 @@ object Cart {
 }
 
 class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor with Timers {
-  def this() = this("123", Cart.empty)
+  def this() = this(new Random(System.currentTimeMillis).alphanumeric.take(10).mkString,
+    Cart.empty)
 
   val log = Logging(context.system, this)
   val checkout: ActorRef = context.actorOf(Props[Checkout], "checkout")
@@ -69,6 +69,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case item: ItemAdded => {
       persist(item.item) {
         event =>
+          log.info("Currently empty. Current state of the cart:" + shoppingCart)
           shoppingCart = shoppingCart.addItem(item.item)
           customer = context.sender
           saveSnapshot(shoppingCart)
@@ -77,7 +78,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       }
     }
     case GetCartState => {
-      sender ! shoppingCart.size
+      sender ! shoppingCart
     }
     case other => {
       log.info("Received unhandled message in Empty state: {}", other)
@@ -113,7 +114,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       context.become(Empty)
     }
     case GetCartState => {
-      sender ! shoppingCart.size
+      sender ! shoppingCart
     }
 
     case other => {
@@ -133,7 +134,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       context.become(Empty)
     }
     case GetCartState => {
-      sender ! shoppingCart.size
+      sender ! shoppingCart
     }
     case other => log.info("Currently in InCheckout state! Received unknown message: {}", other)
   }
@@ -152,7 +153,10 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       shoppingCart = snapshot
       log.info("Recovered cart state: " + shoppingCart.toString)
     }
-    case other => log.info("other: " + other)
+    case item: Item =>
+      shoppingCart = shoppingCart.addItem(item)
+    case other =>
+      log.info("Message received in receiveRecover: " + other)
   }
 
   override def receiveCommand: Receive = Empty
