@@ -3,7 +3,7 @@ package shop
 import akka.actor.{ActorSystem, PoisonPill, Props}
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
-import shop.Checkout.{CheckoutTimeout, DeliveryMethodSelected}
+import shop.Checkout.DeliveryMethodSelected
 import shop.ShopMessages.CheckoutCanceled
 
 import scala.concurrent.duration._

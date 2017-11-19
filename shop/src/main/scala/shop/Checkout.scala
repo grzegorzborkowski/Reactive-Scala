@@ -3,17 +3,25 @@ package shop
 import java.util.concurrent.TimeUnit
 
 import akka.actor.{Actor, ActorRef, Props, Timers}
-import akka.event.Logging
+import akka.event.{Logging, LoggingReceive}
+import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 import shop.Checkout._
 import shop.ShopMessages.{CheckoutCanceled, CheckoutClosed}
 
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Random
 
-class Checkout extends Actor with Timers {
+case class CheckoutState(stateName: PossibleCheckoutState)
+
+class Checkout(id: String) extends PersistentActor with Timers {
+  def this() = this(new Random(System.currentTimeMillis).alphanumeric.take(10).mkString)
+
   val log = Logging(context.system, this)
   val CartRef: ActorRef = context.parent
   var PaymentServiceRef: ActorRef = _
   var customerRef: ActorRef = _
+  var checkoutState = CheckoutState(SelectingDeliveryState())
+  persistState(SelectingDeliveryState())
 
   override def receive: Receive = SelectingDelivery
 
@@ -36,6 +44,7 @@ class Checkout extends Actor with Timers {
       customerRef = sender
       log.info("Delivery method has been selected")
       timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
+      persistState(SelectingPaymentMethodState())
       context.become(SelectingPaymentMethod)
     }
     case GetState => {
@@ -52,6 +61,7 @@ class Checkout extends Actor with Timers {
       this.PaymentServiceRef = context.actorOf(Props[PaymentService], "PaymentService")
       timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
       customerRef ! PaymentServiceStarted(PaymentServiceRef)
+      persistState(ProcessingPaymentState())
       context.become(ProcesingPayment)
     }
     case SelectingPaymentMethodCanceled => {
@@ -101,8 +111,27 @@ class Checkout extends Actor with Timers {
     }
   }
 
-//  def persistState():
+  def persistState(state: PossibleCheckoutState): Unit = {
+    checkoutState = CheckoutState(state)
+    saveSnapshot(checkoutState)
+  }
 
+  override def receiveRecover: Receive = LoggingReceive {
+    case RecoveryCompleted => log.info("Recovery completed")
+    case SnapshotOffer(_, snapshot: CheckoutState) => {
+      log.info("Received snapshottOffer {}", snapshot)
+      checkoutState = snapshot
+      checkoutState.stateName match {
+        case SelectingDeliveryState() => context become SelectingDelivery
+        case SelectingPaymentMethodState() => context become SelectingPaymentMethod
+        case ProcessingPaymentState() => context become ProcesingPayment
+      }
+    }
+  }
+
+  override def receiveCommand: Receive = SelectingDelivery
+
+  override def persistenceId: String = this.id
 }
 
 object Checkout {
@@ -119,10 +148,10 @@ object Checkout {
   case object CheckoutTimerKey
   case object PaymentTimerKey
 
-  sealed trait CheckoutState
-  case class SelectingDeliveryState() extends CheckoutState
-  case class SelectingPaymentMethodState() extends CheckoutState
-  case class ProcessingPaymentState() extends CheckoutState
+  sealed trait PossibleCheckoutState
+  case class SelectingDeliveryState() extends PossibleCheckoutState
+  case class SelectingPaymentMethodState() extends PossibleCheckoutState
+  case class ProcessingPaymentState() extends PossibleCheckoutState
 
   case class GetState()
 
