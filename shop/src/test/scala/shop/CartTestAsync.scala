@@ -15,7 +15,6 @@ class CartTestAsync extends TestKit(ActorSystem("CartTestAsync"))
     system.terminate()
   }
 
-
   "A Cart " should  {
     "Start checkout properly in non empty state" in {
       val cart = system.actorOf(Props[CartManager])

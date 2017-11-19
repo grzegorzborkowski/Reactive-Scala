@@ -61,8 +61,8 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
 
   val log = Logging(context.system, this)
   val checkout: ActorRef = context.actorOf(Props[Checkout], "checkout")
-  var customer: ActorRef = _
-
+  var customer: ActorRef = context.parent
+  var lastTimerSetTime: Long = _
   override def receive: Receive = Empty
 
   def Empty: Receive = {
@@ -113,7 +113,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
           startCartTimer()
           log.info("Currently non empty. Current state of the cart:" + shoppingCart)
           shoppingCart = shoppingCart.addItem(itemAdded.item)
-          customer = context.sender
+          //customer = context.parent
           saveSnapshot(shoppingCart)
           log.info("\nCart was not empty. Received {}, current state of the cart is: {}", itemAdded, shoppingCart)
         }
@@ -161,7 +161,14 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
   }
 
   def startCartTimer(): Unit = {
+    lastTimerSetTime = System.currentTimeMillis()
     timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired, new FiniteDuration(5, TimeUnit.SECONDS))
+  }
+
+  def startCartTimer(timePastSincePreviousTimer: Long): Unit = {
+    lastTimerSetTime = System.currentTimeMillis()
+    timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired, new FiniteDuration(5*1000-timePastSincePreviousTimer,
+      TimeUnit.MILLISECONDS))
   }
 
   def cancelCartTimer(): Unit = {
@@ -170,7 +177,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
 
   def persistTimer(canceled: Boolean): Unit = {
     val currentTime = if (canceled) -1 else System.currentTimeMillis()
-    persist(TimePersistence(currentTime)) {
+    persist(TimePersistence(currentTime-lastTimerSetTime)) {
       event => {
         log.info("Persistence time " + event)
       }
@@ -182,6 +189,9 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case SnapshotOffer(_, snapshot: Cart) => {
       shoppingCart = snapshot
       log.info("Recovered cart state: " + shoppingCart.toString)
+      if (shoppingCart.items.nonEmpty) {
+        context.become(NonEmpty)
+      }
     }
     case item: ItemAdded => {
       log.info("Receive Recoever ItemAdde!")
@@ -191,6 +201,11 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       log.info("Receive Recover ItemRemove")
       val tuple = shoppingCart.removeItem(item.item, item.count)
       shoppingCart = tuple._1
+    }
+    case timePersistence: TimePersistence => {
+      if (timePersistence.timerStart != -1) {
+        startCartTimer(timePersistence.timerStart)
+      }
     }
     case other =>
       log.info("Message received in receiveRecover: " + other)
