@@ -98,8 +98,14 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       }
     }
     case itemAdded: ItemAdded => {
-      shoppingCart = shoppingCart.addItem(itemAdded.item)
-      log.info("Cart was non empty . Received {}, current state of the cart is: {}", shoppingCart)
+      persist(itemAdded.item) {
+        event =>
+          log.info("Currently non empty. Current state of the cart:" + shoppingCart)
+          shoppingCart = shoppingCart.addItem(itemAdded.item)
+          customer = context.sender
+          saveSnapshot(shoppingCart)
+          log.info("\nCart was not empty. Received {}, current state of the cart is: {}", itemAdded, shoppingCart)
+      }
     }
     case StartCheckOut => {
       cancelCartTimer()
