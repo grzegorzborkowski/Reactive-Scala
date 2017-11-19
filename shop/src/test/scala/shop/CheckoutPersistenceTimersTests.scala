@@ -7,6 +7,7 @@ import shop.Checkout.DeliveryMethodSelected
 import shop.ShopMessages.CheckoutCanceled
 
 import scala.concurrent.duration._
+import scala.util.Random
 
 class CheckoutPersistenceTimersTests extends TestKit(ActorSystem("CheckoutPersistenceTimersTests"))
   with WordSpecLike with Matchers with ImplicitSender with BeforeAndAfterAll {
@@ -18,27 +19,30 @@ class CheckoutPersistenceTimersTests extends TestKit(ActorSystem("CheckoutPersis
   "Checkout" should {
     "Restore CheckoutTimer properly after restart " in {
       val parentCart = TestProbe()
-      val childCheckout = parentCart.childActorOf(Props[Checkout])
+      val checkoutID = new Random(System.currentTimeMillis).alphanumeric.take(10).mkString
+
+      val childCheckout = parentCart.childActorOf(Props(new Checkout(checkoutID)))
 
       Thread.sleep(3000)
 
       childCheckout ! PoisonPill
 
-      parentCart.childActorOf(Props[Checkout])
+      parentCart.childActorOf(Props(new Checkout(checkoutID)))
 
       expectMsg(3 seconds, CheckoutCanceled)
     }
 
     "Restore PaymentTimeout properly after restart " in {
       val parentCart = TestProbe()
-      val childCheckouut = parentCart.childActorOf(Props[Checkout])
+      val checkoutID = new Random(System.currentTimeMillis).alphanumeric.take(10).mkString
+      val childCheckout = parentCart.childActorOf(Props(new Checkout(checkoutID)))
 
-      childCheckouut ! DeliveryMethodSelected
+      childCheckout ! DeliveryMethodSelected
       Thread.sleep(3000)
 
-      childCheckouut ! PoisonPill
+      childCheckout ! PoisonPill
 
-      parentCart.childActorOf(Props[Checkout])
+      parentCart.childActorOf(Checkout.props(checkoutID))
 
       expectMsg(3 seconds, CheckoutCanceled)
     }

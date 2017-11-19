@@ -2,9 +2,10 @@ package shop
 
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorRef, Props, Timers}
+import akka.actor.{ActorRef, Props, Timers}
 import akka.event.{Logging, LoggingReceive}
 import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
+import shop.CartManager.{CartTimerExpired, CartTimerExpiredKey}
 import shop.Checkout._
 import shop.ShopMessages.{CheckoutCanceled, CheckoutClosed}
 
@@ -21,6 +22,8 @@ class Checkout(id: String) extends PersistentActor with Timers {
   var PaymentServiceRef: ActorRef = _
   var customerRef: ActorRef = _
   var checkoutState = CheckoutState(SelectingDeliveryState())
+  var lastCheckoutTimerSetTime: Long = _
+  var lastPaymentTimerSetTime: Long = _
 
   override def receive: Receive = SelectingDelivery
 
@@ -29,12 +32,16 @@ class Checkout(id: String) extends PersistentActor with Timers {
   def SelectingDelivery: Receive = {
     case ShopMessages.CheckoutCanceled => {
       log.info("Received checkout cancel message!")
+      persistTimer(canceled = true, "checkout")
+      persistTimer(canceled = true, "payment")
       timers.cancelAll()
       CartRef ! CheckoutCanceled
       context.stop(self)
     }
     case CheckoutTimeout => {
       log.info("Received checkout timeout ")
+      persistTimer(canceled = true, "checkout")
+      persistTimer(canceled = true, "payment")
       timers.cancelAll()
       CartRef ! CheckoutCanceled
       context.stop(self)
@@ -42,6 +49,7 @@ class Checkout(id: String) extends PersistentActor with Timers {
     case DeliveryMethodSelected => {
       customerRef = sender
       log.info("Delivery method has been selected")
+      persistTimer(canceled = false, "payment")
       timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
       persist(SelectingPaymentMethodState())(persistState)
       context.become(SelectingPaymentMethod)
@@ -58,6 +66,7 @@ class Checkout(id: String) extends PersistentActor with Timers {
     case PaymentSelected => {
       log.info("Selecting payment method")
       this.PaymentServiceRef = context.actorOf(Props[PaymentService], "PaymentService")
+      persistTimer(canceled = false, "payment")
       timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
       customerRef ! PaymentServiceStarted(PaymentServiceRef)
       persist(ProcessingPaymentState())(persistState)
@@ -65,12 +74,16 @@ class Checkout(id: String) extends PersistentActor with Timers {
     }
     case SelectingPaymentMethodCanceled => {
       log.info("Canceled selecting payment method")
+      persistTimer(canceled = true, "checkout")
+      persistTimer(canceled = true, "payment")
       timers.cancelAll()
       CartRef ! CheckoutCanceled
       context.stop(self)
     }
     case PaymentTimeout => {
       log.info("Received payment tiemeout!")
+      persistTimer(canceled = true, "checkout")
+      persistTimer(canceled = true, "payment")
       timers.cancelAll()
       CartRef ! CheckoutCanceled
       context.stop(self)
@@ -86,18 +99,24 @@ class Checkout(id: String) extends PersistentActor with Timers {
   def ProcesingPayment: Receive = {
     case PaymentReceived => {
       log.info("Payment Received!")
+      persistTimer(canceled = true, "checkout")
+      persistTimer(canceled = true, "payment")
       timers.cancelAll()
       CartRef ! CheckoutClosed
       context.stop(self)
     }
     case PaymentTimeout => {
       log.info("Payment timeout")
+      persistTimer(canceled = true, "checkout")
+      persistTimer(canceled = true, "payment")
       timers.cancelAll()
       CartRef ! CheckoutCanceled
       context.stop(self)
     }
     case PaymentCanceled => {
       log.info("Payment Canceled")
+      persistTimer(canceled = true, "checkout")
+      persistTimer(canceled = true, "payment")
       timers.cancelAll()
       CartRef ! CheckoutCanceled
       context.stop(self)
@@ -127,10 +146,42 @@ class Checkout(id: String) extends PersistentActor with Timers {
         case ProcessingPaymentState() => context become ProcesingPayment
       }
     }
+    case checkoutTimePersistence: CheckoutTimePersistence => {
+      lastCheckoutTimerSetTime = System.currentTimeMillis()
+      timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired,
+        new FiniteDuration(5 * 1000 - checkoutTimePersistence.remainingTime, TimeUnit.MILLISECONDS))
+    }
+    case paymentTimePersistence: PaymentTimePersistence => {
+      lastPaymentTimerSetTime = System.currentTimeMillis()
+      timers.startSingleTimer(PaymentTimerKey, PaymentTimeout,
+        new FiniteDuration(5 * 1000 - paymentTimePersistence.remainingTime, TimeUnit.MILLISECONDS))
+    }
     case SnapshotOffer(_, snapshot: Any) => {
-      log.info("Snapshot!")
+      log.info("Unknown Snapshot!" + snapshot)
+    }
+
+  }
+
+  def persistTimer(canceled: Boolean, timer: String): Unit = {
+    log.info("Persist timer call for canceled: {}, timer : {}", canceled, timer)
+    val currentTime = if (canceled) -1 else System.currentTimeMillis()
+    if (currentTime != -1) {
+      timer match {
+        case "checkout" => {
+          persist(CheckoutTimePersistence(currentTime - lastCheckoutTimerSetTime, timer)) { event =>
+            log.info("Persisting checkoutTimePersistence {}", event)
+          }
+        }
+        case "payment" => {
+          persist(PaymentTimePersistence(currentTime - lastPaymentTimerSetTime, timer)) { event =>
+            log.info("Persisitng paymentTimePersistence {}", event)
+          }
+        }
+        case other => log.info("Unknown timer {}", other)
+      }
     }
   }
+
 
   override def receiveCommand: Receive = SelectingDelivery
 
@@ -141,23 +192,39 @@ object Checkout {
   def props(id: String): Props = Props(new Checkout(id))
 
   case class CheckoutTimeout()
+
   case class DeliveryMethodSelected()
+
   case class PaymentSelected(method: String)
+
   case class SelectingPaymentMethodCanceled()
+
   case class PaymentReceived()
+
   case class PaymentTimeout()
+
   case class PaymentCanceled()
 
   case class PaymentServiceStarted(paymentServiceRef: ActorRef)
 
   case object CheckoutTimerKey
+
   case object PaymentTimerKey
 
   sealed trait PossibleCheckoutState
+
   case class SelectingDeliveryState() extends PossibleCheckoutState
+
   case class SelectingPaymentMethodState() extends PossibleCheckoutState
+
   case class ProcessingPaymentState() extends PossibleCheckoutState
 
   case class GetState()
+
+  sealed trait TimePersistence
+
+  case class CheckoutTimePersistence(remainingTime: Long, timer: String) extends TimePersistence
+
+  case class PaymentTimePersistence(remainingTime: Long, timer: String) extends TimePersistence
 
 }
