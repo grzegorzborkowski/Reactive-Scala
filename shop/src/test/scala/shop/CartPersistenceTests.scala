@@ -4,7 +4,7 @@ import java.net.URI
 
 import akka.actor.{ActorSystem, PoisonPill, Props}
 import akka.testkit.{ImplicitSender, TestKit}
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, Matchers, WordSpecLike}
+import org.scalatest.{Matchers, WordSpecLike}
 import shop.CartManager.{GetCartState, ItemAdded, ItemRemove}
 
 import scala.util.Random

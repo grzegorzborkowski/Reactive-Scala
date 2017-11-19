@@ -68,13 +68,15 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
   def Empty: Receive = {
     case item: ItemAdded => {
       persist(item) {
-        event =>
+        event => {
+          startCartTimer()
           log.info("Currently empty. Current state of the cart:" + shoppingCart)
           shoppingCart = shoppingCart.addItem(item.item)
           customer = context.sender
           saveSnapshot(shoppingCart)
           log.info("\nCart was empty. Received {}, current state of the cart is: {}", item, shoppingCart)
           context.become(NonEmpty)
+        }
       }
     }
     case GetCartState => {
@@ -104,12 +106,14 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     }
     case itemAdded: ItemAdded => {
       persist(itemAdded) {
-        event =>
+        event => {
+          startCartTimer()
           log.info("Currently non empty. Current state of the cart:" + shoppingCart)
           shoppingCart = shoppingCart.addItem(itemAdded.item)
           customer = context.sender
           saveSnapshot(shoppingCart)
           log.info("\nCart was not empty. Received {}, current state of the cart is: {}", itemAdded, shoppingCart)
+        }
       }
     }
     case StartCheckOut => {
@@ -122,6 +126,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case CartTimerExpired => {
       log.info("CartTimeExpired! Your cart is becoming empty.")
       shoppingCart = Cart.empty
+      customer ! CartTimerExpired
       context.become(Empty)
     }
     case GetCartState => {
