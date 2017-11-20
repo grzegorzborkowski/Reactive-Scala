@@ -7,8 +7,10 @@ import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import productcatalog.ProductCatalog
+import productcatalog.ProductCatalog.GetElements
 import shop.Checkout.{DeliveryMethodSelected, PaymentReceived, PaymentSelected}
 
+import scala.collection.immutable.ListMap
 import scala.concurrent.Await
 import scala.concurrent.duration._
 
@@ -25,9 +27,9 @@ object ShopApplication extends App {
     implicit val waitForCheckoutRefTimeout = Timeout(5 seconds)
 
 
-    val futureResponse = productCatalog ? "Hello"
-    val result = Await.result(futureResponse, waitForCheckoutRefTimeout.duration).asInstanceOf[String]
-    println (result)
+    val futureResponse = productCatalog ? GetElements("Beef")
+    val result = Await.result(futureResponse, waitForCheckoutRefTimeout.duration).asInstanceOf[Seq[(Int, Item)]]
+    println (result.toString())
     /*
     val uri = new java.net.URI("1")
     cart ! ItemAdded(Item(uri, "New Item", 10.0, 1))
