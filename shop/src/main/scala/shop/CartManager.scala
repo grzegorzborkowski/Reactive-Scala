@@ -3,7 +3,7 @@ package shop
 import java.net.URI
 import java.util.concurrent.TimeUnit
 
-import akka.actor.{Actor, ActorRef, Props, Timers}
+import akka.actor.{ActorRef, Props, Timers}
 import akka.event.{Logging, LoggingReceive}
 import akka.persistence.{PersistentActor, RecoveryCompleted, SnapshotOffer}
 import shop.CartManager._
@@ -11,6 +11,7 @@ import shop.NewState.NewState
 import shop.ShopMessages._
 
 import scala.concurrent.duration.FiniteDuration
+import scala.util.Random
 
 case class Item(id: URI, name: String, price: BigDecimal, count: Int)
 
@@ -33,7 +34,7 @@ case class Cart(items: Map[URI, Item]) {
       val newCount = item.count - count
       newCount match {
         case 0 => {
-          val newItemsMap = items + (item.id -> Item(item.id, item.name, item.price, 0))
+          val newItemsMap = items.filterKeys(_ != item.id)
           (Cart(newItemsMap), NewState.Empty)
         }
         case newCount if newCount > 0 => {
@@ -41,13 +42,13 @@ case class Cart(items: Map[URI, Item]) {
           (Cart(newItemsMap), NewState.NonEmpty)
         }
         case newCount if newCount < 0 => {
-          println("Jestem tu")
-          println("Items in newCount < 0" + items)
           (Cart(items), NewState.NonEmpty)
         }
       }
     } else (Cart(items), NewState.NonEmpty)
   }
+
+  def size: Int = items.size
 }
 
 object Cart {
@@ -55,48 +56,72 @@ object Cart {
 }
 
 class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor with Timers {
-  def this() = this("123", Cart.empty)
+  def this() = this(new Random(System.currentTimeMillis).alphanumeric.take(10).mkString,
+    Cart.empty)
 
   val log = Logging(context.system, this)
   val checkout: ActorRef = context.actorOf(Props[Checkout], "checkout")
-  var customer: ActorRef = _
-
+  var customer: ActorRef = context.parent
+  var lastTimerSetTime: Long = _
   override def receive: Receive = Empty
 
   def Empty: Receive = {
     case item: ItemAdded => {
-      persist(item.item) {
-        event =>
+      persist(item) {
+        event => {
+          persistTimer(false)
+          startCartTimer()
+          log.info("Currently empty. Current state of the cart:" + shoppingCart)
           shoppingCart = shoppingCart.addItem(item.item)
           customer = context.sender
-          log.info("Cart was empty. Received {}, current state of the cart is: {}", item, shoppingCart)
+          saveSnapshot(shoppingCart)
+          log.info("\nCart was empty. Received {}, current state of the cart is: {}", item, shoppingCart)
           context.become(NonEmpty)
+        }
       }
-
+    }
+    case GetCartState => {
+      sender ! shoppingCart
     }
     case other => {
-      log.info("Received unhandled message: {}", other)
+      log.info("Received unhandled message in Empty state: {}", other)
     }
   }
 
   def NonEmpty: Receive = {
     case itemRemove: ItemRemove => {
-      startCartTimer()
-      val resultTuple = shoppingCart.removeItem(itemRemove.item, itemRemove.count)
-      shoppingCart = resultTuple._1
-      val state = resultTuple._2
-      log.info("Received ItemRemove message: {}. Current state of the cart:", itemRemove, shoppingCart)
-      state match {
-        case NewState.Empty => context.become(Empty)
-        case NewState.NonEmpty =>
+      persist(itemRemove) {
+        event => {
+          persistTimer(false)
+          startCartTimer()
+          val resultTuple = shoppingCart.removeItem(itemRemove.item, itemRemove.count)
+          shoppingCart = resultTuple._1
+          val state = resultTuple._2
+          saveSnapshot(shoppingCart)
+          log.info("Received ItemRemove message: {}. Current state of the cart:", itemRemove, shoppingCart)
+          state match {
+            case NewState.Empty => context.become(Empty)
+            case NewState.NonEmpty =>
+          }
+        }
       }
     }
     case itemAdded: ItemAdded => {
-      shoppingCart = shoppingCart.addItem(itemAdded.item)
-      log.info("Cart was non empty . Received {}, current state of the cart is: {}", shoppingCart)
+      persist(itemAdded) {
+        event => {
+          persistTimer(false)
+          startCartTimer()
+          log.info("Currently non empty. Current state of the cart:" + shoppingCart)
+          shoppingCart = shoppingCart.addItem(itemAdded.item)
+          //customer = context.parent
+          saveSnapshot(shoppingCart)
+          log.info("\nCart was not empty. Received {}, current state of the cart is: {}", itemAdded, shoppingCart)
+        }
+      }
     }
     case StartCheckOut => {
       cancelCartTimer()
+      persistTimer(true)
       log.info("Starting the checkout[inCart].")
       log.info(customer.toString())
       customer ! ShopMessages.CheckoutStarted(checkout)
@@ -105,6 +130,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case CartTimerExpired => {
       log.info("CartTimeExpired! Your cart is becoming empty.")
       shoppingCart = Cart.empty
+      customer ! CartTimerExpired
       context.become(Empty)
     }
     case GetCartState => {
@@ -120,6 +146,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case CheckoutCanceled => {
       log.info("Received the checkout cancelled message")
       startCartTimer()
+      persistTimer(false)
       context.become(NonEmpty)
     }
     case CheckoutClosed => {
@@ -127,21 +154,61 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       shoppingCart = Cart.empty
       context.become(Empty)
     }
+    case GetCartState => {
+      sender ! shoppingCart
+    }
     case other => log.info("Currently in InCheckout state! Received unknown message: {}", other)
   }
 
   def startCartTimer(): Unit = {
+    lastTimerSetTime = System.currentTimeMillis()
     timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired, new FiniteDuration(5, TimeUnit.SECONDS))
+  }
+
+  def startCartTimer(timePastSincePreviousTimer: Long): Unit = {
+    lastTimerSetTime = System.currentTimeMillis()
+    timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired, new FiniteDuration(5*1000-timePastSincePreviousTimer,
+      TimeUnit.MILLISECONDS))
   }
 
   def cancelCartTimer(): Unit = {
     timers.cancel(CartTimerExpiredKey)
   }
 
+  def persistTimer(canceled: Boolean): Unit = {
+    val currentTime = if (canceled) -1 else System.currentTimeMillis()
+    persist(TimePersistence(currentTime-lastTimerSetTime)) {
+      event => {
+        log.info("Persistence time " + event)
+      }
+    }
+  }
+
   override def receiveRecover: Receive = LoggingReceive {
     case RecoveryCompleted => log.info("Recovery completed!")
-    case SnapshotOffer(_, snapshot: Cart) => shoppingCart = snapshot
-    case other => log.info("other: " + other)
+    case SnapshotOffer(_, snapshot: Cart) => {
+      shoppingCart = snapshot
+      log.info("Recovered cart state: " + shoppingCart.toString)
+      if (shoppingCart.items.nonEmpty) {
+        context.become(NonEmpty)
+      }
+    }
+    case item: ItemAdded => {
+      log.info("Receive Recoever ItemAdde!")
+      shoppingCart = shoppingCart.addItem(item.item)
+    }
+    case item: ItemRemove => {
+      log.info("Receive Recover ItemRemove")
+      val tuple = shoppingCart.removeItem(item.item, item.count)
+      shoppingCart = tuple._1
+    }
+    case timePersistence: TimePersistence => {
+      if (timePersistence.timerStart != -1) {
+        startCartTimer(timePersistence.timerStart)
+      }
+    }
+    case other =>
+      log.info("Message received in receiveRecover: " + other)
   }
 
   override def receiveCommand: Receive = Empty
@@ -165,6 +232,10 @@ object CartManager {
   case object CartTimerExpiredKey
 
   case class GetCartState()
+
+  case class persistTimer(startDuration: FiniteDuration)
+
+  case class TimePersistence(timerStart: Long)
 
 }
 

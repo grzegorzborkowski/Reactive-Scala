@@ -5,28 +5,39 @@ import java.net.URI
 import akka.actor.{ActorSystem, PoisonPill, Props}
 import akka.testkit.{ImplicitSender, TestKit}
 import org.scalatest.{BeforeAndAfterAll, Matchers, WordSpecLike}
-import shop.CartManager.{GetCartState, ItemAdded}
+import shop.CartManager.{GetCartState, ItemAdded, ItemRemove}
 
-import scala.collection.immutable.Stream.Empty
+import scala.util.Random
+
 
 class CartPersistenceTests extends
   TestKit(ActorSystem("CartPersistenceSystem"))
   with WordSpecLike
   with Matchers
-  with BeforeAndAfterAll
   with ImplicitSender
+  with BeforeAndAfterAll
 {
-  override def afterAll: Unit = {
-    TestKit.shutdownActorSystem(system)
+
+  override def afterAll(): Unit = {
+    system.terminate()
   }
 
   "Cart" should {
-    val item = Item(new URI("Uri-123"), "First-Item", 10, 1)
+    val first_item = Item(new URI("Uri-1"), "First-Item", 10, 1)
+    val second_item = Item(new URI("Uri-2"), "Second-Item", 10, 1)
 
     "Add an item to the cart an preserve it after the restart" in {
-      val cartManagerID = "1"
+      // TODO: how to fix that test, so that the when we run the same
+      // TODO: test with the same actorID, the first actor doesn't recover its state
+      val cartManagerID = new Random(System.currentTimeMillis).alphanumeric.take(10).mkString
+      println(cartManagerID)
       val cartActor = system.actorOf(Props(new CartManager(cartManagerID, Cart.empty)))
-      cartActor ! ItemAdded(item)
+
+      cartActor ! ItemAdded(first_item)
+      cartActor ! GetCartState
+
+      expectMsg(Cart(Map(new URI("Uri-1") ->
+        Item(new URI("Uri-1"), "First-Item", 10, 1))))
 
       cartActor ! PoisonPill
 
@@ -34,7 +45,51 @@ class CartPersistenceTests extends
 
       cartActor_2 ! GetCartState
 
-      expectMsg(Empty)
+      expectMsg(Cart(Map(new URI("Uri-1") ->
+        Item(new URI("Uri-1"), "First-Item", 10, 1))))
+    }
+
+    "Persistence for more than one item" in {
+      val cartManagerID = new Random(System.currentTimeMillis).alphanumeric.take(10).mkString
+      val firstActor = system.actorOf(Props(new CartManager(cartManagerID, Cart.empty)))
+      val expectedCart = Cart(Map(
+        new URI("Uri-1") -> Item(new URI("Uri-1"), "First-Item", 10, 1),
+        new URI("Uri-2") -> Item(new URI("Uri-2"), "Second-Item", 10, 1)))
+
+      firstActor ! ItemAdded(first_item)
+      firstActor ! ItemAdded(second_item)
+      firstActor ! GetCartState
+
+      expectMsg(expectedCart)
+
+      firstActor ! PoisonPill
+
+      val secondActor = system.actorOf(Props(new CartManager(cartManagerID, Cart.empty)))
+
+      secondActor ! GetCartState
+
+      expectMsg(expectedCart)
+    }
+
+    "Persistence for item removal" in {
+      val cartManagerID = new Random(System.currentTimeMillis).alphanumeric.take(10).mkString
+      val firstActor = system.actorOf(Props(new CartManager(cartManagerID, Cart.empty)))
+      val expectedCart = Cart(Map(
+        new URI("Uri-2") -> Item(new URI("Uri-2"), "Second-Item", 10, 1)))
+
+      firstActor ! ItemAdded(first_item)
+      firstActor ! ItemAdded(second_item)
+      firstActor ! ItemRemove(first_item, 1)
+
+      firstActor ! GetCartState
+      expectMsg(expectedCart)
+
+      firstActor ! PoisonPill
+
+      val secondActor = system.actorOf(Props(new CartManager(cartManagerID, Cart.empty)))
+
+      secondActor ! GetCartState
+      expectMsg(expectedCart)
     }
   }
 

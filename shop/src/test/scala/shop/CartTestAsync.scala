@@ -11,6 +11,10 @@ import shop.ShopMessages.CheckoutStarted
 class CartTestAsync extends TestKit(ActorSystem("CartTestAsync"))
   with WordSpecLike with BeforeAndAfterAll with ImplicitSender {
 
+  override def afterAll(): Unit = {
+    system.terminate()
+  }
+
   "A Cart " should  {
     "Start checkout properly in non empty state" in {
       val cart = system.actorOf(Props[CartManager])
