@@ -4,7 +4,6 @@ import akka.actor.{Actor, Props}
 import com.github.tototoshi.csv._
 import shop.Item
 import java.net.URI
-
 import akka.event.Logging
 import productcatalog.ProductCatalog.GetElements
 
