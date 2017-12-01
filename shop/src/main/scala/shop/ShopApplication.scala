@@ -9,7 +9,8 @@ import com.typesafe.config.ConfigFactory
 import paymentservers.VisaServer
 import productcatalog.ProductCatalog
 import productcatalog.ProductCatalog.GetElements
-import shop.Checkout.{DeliveryMethodSelected, PaymentReceived, PaymentSelected}
+import shop.Checkout.{DeliveryMethodSelected, PaymentReceived, PaymentSelected, PaymentServiceStarted}
+import shop.PaymentService.PaymentConfirmed
 
 import scala.collection.immutable.ListMap
 import scala.concurrent.Await
@@ -18,6 +19,7 @@ import scala.concurrent.duration._
 object ShopApplication extends App {
 
   override def main(args: Array[String]): Unit = {
+    val debug = true
     val config = ConfigFactory.load()
 
     val shopSystem = ActorSystem("ShopApplication", config.getConfig("shopSystem").withFallback(config))
@@ -28,27 +30,37 @@ object ShopApplication extends App {
 
     val cart = shopSystem.actorOf(Props[CartManager], name = "CartActor")
     val productCatalog = productCatalogSystem.actorOf(Props[ProductCatalog])
-    implicit val waitTime = Timeout(5 seconds)
-    // implicit val waitForPaymentSelected = Timeout(10 seconds)
+    implicit val waitTime = Timeout(30 seconds)
+
     val futureResponse = productCatalog ? GetElements("Beef")
     val result = Await.result(futureResponse, waitTime.duration).asInstanceOf[Seq[(Int, Item)]]
     println (result.toString())
 
     val uri = new java.net.URI("1")
+    if (debug) {
+      System.out.println("[DEBUG] Sending ItemAdded request to CartManager")
+    }
     cart ! ItemAdded(Item(uri, "New Item", 10.0, 1))
+    if (debug) {
+      System.out.println("[DEBUG] Sent ItemAdded request to CartManager")
+    }
 
-
-    val checkout = Await.result(cart ? StartCheckOut, waitTime.duration).asInstanceOf[ActorRef]
+    if(debug) {
+      System.out.println("[DEBUG] Sending StartCheckout ask to cart")
+    }
+    val checkoutStarted = Await.result(cart ? StartCheckOut, waitTime.duration).asInstanceOf[CheckoutStarted]
+    val checkout = checkoutStarted.checkoutActorRef
 
     checkout ! DeliveryMethodSelected
 
-    checkout ! PaymentSelected
+    val paymentSelectedMessage = PaymentSelected("Visa")
+    val paymentService = Await.result(checkout ? paymentSelectedMessage, waitTime.duration).asInstanceOf[PaymentServiceStarted]
 
-    val paymentService = Await.result(checkout ? PaymentSelected, waitTime.duration).asInstanceOf[ActorRef]
+    if (debug) {
+      System.out.println("[DEBUG] Payment service response: {}", paymentService)
+    }
 
-    paymentService ! DoPayment
+    val response = Await.result(paymentService.paymentServiceRef ? DoPayment(), waitTime.duration).asInstanceOf[PaymentConfirmed]
 
-
-    checkout ! PaymentReceived
   }
 }

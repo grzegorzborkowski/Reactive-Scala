@@ -3,14 +3,14 @@ package shop
 import akka.actor.Actor
 import akka.event.Logging
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{HttpResponse, StatusCodes}
+import akka.http.scaladsl.model.{HttpRequest, HttpResponse, StatusCodes}
 import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import akka.util.ByteString
 import shop.Checkout.PaymentReceived
 import shop.PaymentService.PaymentConfirmed
 import shop.ShopMessages.DoPayment
-import scalaj.http.{Http => HttpQuery}
 
+//import scalaj.http.{HttpRequest, Http => HttpQuery}
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
@@ -46,12 +46,15 @@ class PaymentService extends Actor {
     }
 
 
-    case DoPayment => {
-      log.info("Received DoPayment message!")
-      val content = HttpQuery("http://localhost:8080/visa-payment").asString
-      log.info("Received response from Visa Payment service {}", content)
+    case doPayment: DoPayment => {
+      log.info("Received DoPayment message {}", doPayment)
+      http.singleRequest(HttpRequest
+      (uri = "http://localhost:8080/visa-payment")).
+        onComplete(response =>
+          log.info("Recived response from Visa Payment Service {}", response)
+        )
 
-      sender ! PaymentConfirmed
+      sender ! PaymentConfirmed()
       checkoutRef ! PaymentReceived
     }
     case other => {

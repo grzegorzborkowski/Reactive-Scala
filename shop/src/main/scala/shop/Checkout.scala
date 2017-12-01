@@ -27,7 +27,7 @@ class Checkout(id: String) extends PersistentActor with Timers {
 
   override def receive: Receive = SelectingDelivery
 
-  timers.startSingleTimer(CheckoutTimerKey, CheckoutTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
+  timers.startSingleTimer(CheckoutTimerKey, CheckoutTimeout, new FiniteDuration(30, TimeUnit.SECONDS))
 
   def SelectingDelivery: Receive = {
     case ShopMessages.CheckoutCanceled => {
@@ -50,7 +50,7 @@ class Checkout(id: String) extends PersistentActor with Timers {
       customerRef = sender
       log.info("Delivery method has been selected")
       persistTimer(canceled = false, "payment")
-      timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
+      timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(30, TimeUnit.SECONDS))
       persist(SelectingPaymentMethodState())(persistState)
       context.become(SelectingPaymentMethod)
     }
@@ -58,17 +58,18 @@ class Checkout(id: String) extends PersistentActor with Timers {
       sender ! SelectingDeliveryState
     }
     case other => {
-      log.info("Unhandled message" + other)
+      log.info("Current state: SelectingDelivery. Unhandled message" + other)
     }
   }
 
   def SelectingPaymentMethod: Receive = {
-    case PaymentSelected => {
-      log.info("Selecting payment method")
+    case paymentSelected: PaymentSelected => {
+      log.info("Selecting payment method {}", paymentSelected.method)
       this.PaymentServiceRef = context.actorOf(Props[PaymentService], "PaymentService")
       persistTimer(canceled = false, "payment")
-      timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(5, TimeUnit.SECONDS))
+      timers.startSingleTimer(PaymentTimerKey, PaymentTimeout, new FiniteDuration(30, TimeUnit.SECONDS))
       customerRef ! PaymentServiceStarted(PaymentServiceRef)
+      sender ! PaymentServiceStarted(PaymentServiceRef)
       persist(ProcessingPaymentState())(persistState)
       context.become(ProcesingPayment)
     }
@@ -92,7 +93,7 @@ class Checkout(id: String) extends PersistentActor with Timers {
       sender ! SelectingPaymentMethodState
     }
     case other => {
-      log.info("Unhandled message " + other)
+      log.info("Current state: SelectingPaymentMethod. Unhandled message " + other)
     }
   }
 
@@ -125,7 +126,7 @@ class Checkout(id: String) extends PersistentActor with Timers {
       sender ! ProcessingPaymentState
     }
     case other => {
-      log.info("Unhandled message!")
+      log.info("Current state ProcessingPayment. Unhandled message! {}" + other)
     }
   }
 
@@ -149,12 +150,12 @@ class Checkout(id: String) extends PersistentActor with Timers {
     case checkoutTimePersistence: CheckoutTimePersistence => {
       lastCheckoutTimerSetTime = System.currentTimeMillis()
       timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired,
-        new FiniteDuration(5 * 1000 - checkoutTimePersistence.remainingTime, TimeUnit.MILLISECONDS))
+        new FiniteDuration(30 * 1000 - checkoutTimePersistence.remainingTime, TimeUnit.MILLISECONDS))
     }
     case paymentTimePersistence: PaymentTimePersistence => {
       lastPaymentTimerSetTime = System.currentTimeMillis()
       timers.startSingleTimer(PaymentTimerKey, PaymentTimeout,
-        new FiniteDuration(5 * 1000 - paymentTimePersistence.remainingTime, TimeUnit.MILLISECONDS))
+        new FiniteDuration(30 * 1000 - paymentTimePersistence.remainingTime, TimeUnit.MILLISECONDS))
     }
     case SnapshotOffer(_, snapshot: Any) => {
       log.info("Unknown Snapshot!" + snapshot)
