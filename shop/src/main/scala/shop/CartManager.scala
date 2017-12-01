@@ -125,6 +125,7 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
       log.info("Starting the checkout[inCart].")
       log.info(customer.toString())
       customer ! ShopMessages.CheckoutStarted(checkout)
+      sender ! ShopMessages.CheckoutStarted(checkout)
       context.become(InCheckout)
     }
     case CartTimerExpired => {
@@ -160,14 +161,15 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case other => log.info("Currently in InCheckout state! Received unknown message: {}", other)
   }
 
+
   def startCartTimer(): Unit = {
     lastTimerSetTime = System.currentTimeMillis()
-    timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired, new FiniteDuration(5, TimeUnit.SECONDS))
+    timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired, new FiniteDuration(30, TimeUnit.SECONDS))
   }
 
   def startCartTimer(timePastSincePreviousTimer: Long): Unit = {
     lastTimerSetTime = System.currentTimeMillis()
-    timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired, new FiniteDuration(5*1000-timePastSincePreviousTimer,
+    timers.startSingleTimer(CartTimerExpiredKey, CartTimerExpired, new FiniteDuration(30*1000-timePastSincePreviousTimer,
       TimeUnit.MILLISECONDS))
   }
 
