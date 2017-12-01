@@ -9,8 +9,6 @@ import akka.util.ByteString
 import shop.Checkout.PaymentReceived
 import shop.PaymentService.PaymentConfirmed
 import shop.ShopMessages.DoPayment
-
-//import scalaj.http.{HttpRequest, Http => HttpQuery}
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 

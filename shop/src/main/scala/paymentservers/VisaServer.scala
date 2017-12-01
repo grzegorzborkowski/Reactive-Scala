@@ -9,7 +9,9 @@ import akka.stream.ActorMaterializer
 
 import scala.io.StdIn
 
-class VisaServer(systemParam: ActorSystem) extends Actor {
+class VisaServer(systemParam: ActorSystem) extends Actor with
+  PaymentServerSupervision {
+
   implicit val system = systemParam
   implicit val materializer = ActorMaterializer()
   implicit val executionContext = system.dispatcher
@@ -17,10 +19,10 @@ class VisaServer(systemParam: ActorSystem) extends Actor {
   val route: Route =
     path("visa-payment") {
       get {
-        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`,
-          "Payment OK"))
-      }
-    }
+            complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`,
+              "Payment OK"))
+          }
+        }
 
   val port = 8080
   val bindingFuture = Http().bindAndHandle(route, "localhost", port)
