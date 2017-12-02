@@ -1,19 +1,63 @@
 package productcatalog
 
-import akka.actor.{Actor, Props}
+import akka.actor.{Actor, ActorSystem, Props}
 import com.github.tototoshi.csv._
 import shop.Item
 import java.net.URI
-import akka.event.Logging
-import productcatalog.ProductCatalog.GetElements
 
-class ProductCatalog extends Actor {
-  val productCatalogStorage = context.actorOf(Props[ProductCatalogStorage])
+import akka.http.scaladsl.Http
+import akka.event.Logging
+import akka.routing.{ActorRefRoutee, RoundRobinRoutingLogic, Router}
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
+import productcatalog.ProductCatalog.GetElements
+import akka.actor.ActorSystem
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.server.Directives._
+import akka.stream.ActorMaterializer
+
+import scala.io.StdIn
+
+class ProductCatalog(systemParam: ActorSystem, numberOfWorkers: Int) extends Actor {
+
+  implicit val system = systemParam
   val log = Logging(context.system, this)
+  final implicit val materializer: ActorMaterializer = ActorMaterializer(ActorMaterializerSettings(context.system))
+  implicit val executionContext = system.dispatcher
+
+  val route = {
+    path("query" / """\w+""".r) {
+      str => {
+        log.info("Received request for : {}", str)
+        val response = router.route(GetElements(str), self)
+        // todo: fix this
+        log.info("Response in route {}", response)
+        complete(HttpEntity(
+          ContentTypes.`application/json`, response.toString))
+      }
+    }
+  }
+
+  val bindingFuture = Http().bindAndHandle(route, "localhost", 7777)
+
+  val routees = Vector.fill(numberOfWorkers) {
+    val r = context.actorOf(Props[ProductCatalogStorage])
+    context watch r
+    ActorRefRoutee(r)
+  }
+
+  var router = {
+    Router(RoundRobinRoutingLogic(), routees)
+  }
+
+  println(s"Server online at http://localhost:8080/\nPress RETURN to stop...")
+  StdIn.readLine() // let it run until user presses return
+  bindingFuture
+    .flatMap(_.unbind()) // trigger unbinding from the port
+    .onComplete(_ => system.terminate()) // and shutdown when done
 
   override def receive = {
     case getElements: GetElements => {
-      productCatalogStorage forward getElements
+      router.route(getElements, sender())
     }
     case other => log.info("Received unhandled message {}", other)
   }
@@ -51,6 +95,7 @@ class ProductCatalogStorage extends Actor {
 
   override def receive = {
     case GetElements(element) => {
+      log.info("Received GetElemenets query")
       val distance_map = products.toSeq.map(entry =>
         (Util.Util.occurences(entry._1, element),
           entry._2))
