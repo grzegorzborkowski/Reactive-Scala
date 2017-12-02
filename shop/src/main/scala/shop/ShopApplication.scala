@@ -2,11 +2,11 @@ package shop
 
 import akka.actor.{ActorRef, ActorSystem, Props}
 import shop.CartManager._
-import shop.ShopMessages.{CheckoutStarted, DoPayment, StartCheckOut}
+import shop.ShopMessages.{CheckoutStarted, DoDangerousPayment, DoPayment, StartCheckOut}
 import akka.pattern.ask
 import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
-import paymentservers.VisaServer
+import paymentservers.{VisaServer, VisaServerSupervisor}
 import productcatalog.ProductCatalog
 import productcatalog.ProductCatalog.GetElements
 import shop.Checkout.{DeliveryMethodSelected, PaymentReceived, PaymentSelected, PaymentServiceStarted}
@@ -26,8 +26,12 @@ object ShopApplication extends App {
     val productCatalogSystem = ActorSystem("ProductCatalog", config.getConfig("productCatalogSystem").withFallback(config))
 
     val paymentSystem = ActorSystem("Visa", config.getConfig("paymentSystem").withFallback(config))
-    val visaServer = paymentSystem.actorOf(Props(new VisaServer(paymentSystem)))
+    //val visaServer = paymentSystem.actorOf(
+    //  Props(new VisaServer(paymentSystem)))
 
+    val visaServer = paymentSystem.actorOf(
+      Props(new VisaServerSupervisor(paymentSystem))
+    )
     val cart = shopSystem.actorOf(Props[CartManager], name = "CartActor")
     val productCatalog = productCatalogSystem.actorOf(Props[ProductCatalog])
     implicit val waitTime = Timeout(30 seconds)
@@ -60,7 +64,10 @@ object ShopApplication extends App {
       System.out.println("[DEBUG] Payment service response: {}", paymentService)
     }
 
-    val response = Await.result(paymentService.paymentServiceRef ? DoPayment(), waitTime.duration).asInstanceOf[PaymentConfirmed]
+    //val response = Await.result(paymentService.paymentServiceRef ? DoPayment(), waitTime.duration).asInstanceOf[PaymentConfirmed]
 
+    val response = Await.result(paymentService.paymentServiceRef ? DoDangerousPayment(), waitTime.duration)
+
+    System.out.println(response)
   }
 }

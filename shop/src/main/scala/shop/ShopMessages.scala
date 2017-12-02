@@ -16,4 +16,6 @@ object ShopMessages {
 
   case class DoPayment()
 
+  case class DoDangerousPayment()
+
 }

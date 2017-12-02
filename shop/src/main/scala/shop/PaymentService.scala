@@ -8,7 +8,8 @@ import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
 import akka.util.ByteString
 import shop.Checkout.PaymentReceived
 import shop.PaymentService.PaymentConfirmed
-import shop.ShopMessages.DoPayment
+import shop.ShopMessages.{DoDangerousPayment, DoPayment}
+
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
 
@@ -51,9 +52,22 @@ class PaymentService extends Actor {
         onComplete(response =>
           log.info("Recived response from Visa Payment Service {}", response)
         )
-
       sender ! PaymentConfirmed()
       checkoutRef ! PaymentReceived
+    }
+    case doDangerousPayment: DoDangerousPayment => {
+      log.info("Received DoDangerousPayment message: {}", doDangerousPayment)
+      http.singleRequest(HttpRequest
+      (uri = "http://localhost:8080/visa-payment-danger")).
+        onComplete(response =>
+        response match {
+          case response => {
+            log.info("Received response from Visa Payment Service {}", response)
+            sender ! PaymentConfirmed()
+            checkoutRef ! PaymentReceived
+          }
+        }
+      )
     }
     case other => {
       log.info("Received unknown message {}", other)
