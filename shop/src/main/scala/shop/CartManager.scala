@@ -137,7 +137,6 @@ class CartManager(id: String, var shoppingCart: Cart) extends PersistentActor wi
     case GetCartState => {
       sender ! shoppingCart
     }
-
     case other => {
       log.info("Currently in NonEmpty state! Received unknown message: {}", other)
     }

@@ -29,12 +29,12 @@ object ShopApplication extends App {
     val visaServer = paymentSystem.actorOf(Props(new VisaServer(paymentSystem)))
 
     val cart = shopSystem.actorOf(Props[CartManager], name = "CartActor")
-    val productCatalog = productCatalogSystem.actorOf(Props(new ProductCatalog(productCatalogSystem, 10)))
+    val productCatalog = productCatalogSystem.actorOf(Props(new ProductCatalog(productCatalogSystem)))
     implicit val waitTime = Timeout(30 seconds)
 
-    val futureResponse = productCatalog ? GetElements("Beef")
-    val result = Await.result(futureResponse, waitTime.duration).asInstanceOf[Seq[(Int, Item)]]
-    println (result.toString())
+    //val futureResponse = productCatalog ? GetElements("Beef")
+    //val result = Await.result(futureResponse, waitTime.duration).asInstanceOf[Seq[(Int, Item)]]
+    //println (result.toString())
     /*
     val uri = new java.net.URI("1")
     if (debug) {
