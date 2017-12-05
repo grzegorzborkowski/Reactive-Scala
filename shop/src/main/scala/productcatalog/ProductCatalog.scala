@@ -1,25 +1,37 @@
 package productcatalog
 
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
-import com.github.tototoshi.csv._
-import shop.Item
 import java.net.URI
 
-import akka.http.scaladsl.Http
+import akka.actor.{Actor, ActorRef, ActorSystem, Props}
 import akka.event.Logging
-import akka.routing.{ActorRefRoutee, RandomRoutingLogic, RoundRobinRoutingLogic, Router}
-import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
-import productcatalog.ProductCatalog.GetElements
+import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.server.Directives._
-import akka.stream.ActorMaterializer
-import akka.util.Timeout
 import akka.pattern.ask
+import akka.routing.{ActorRefRoutee, RoundRobinRoutingLogic, Router}
+import akka.stream.{ActorMaterializer, ActorMaterializerSettings}
+import akka.util.Timeout
+import com.github.tototoshi.csv._
+import productcatalog.ProductCatalog.GetElements
+import shop.Item
 
-import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.{Await, Future}
-import scala.io.StdIn
+import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.io.StdIn
+
+
+
+
+
+import akka.http.scaladsl.server.Directives
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
+import spray.json._
+
+import productcatalog.JSONProductCatalogConverter._
+import play.api.libs.json._
+
+
+
 
 class ProductCatalog(systemParam: ActorSystem) extends Actor {
 
@@ -35,8 +47,8 @@ class ProductCatalog(systemParam: ActorSystem) extends Actor {
       str => {
         log.info("Received request for : {}", str)
         val futureItems = catalog ? GetElements(str)
-        val response = Await.result(futureItems, timeout.duration).asInstanceOf[String]
-        complete(HttpEntity(ContentTypes.`text/plain(UTF-8)`, response))
+        val response = Await.result(futureItems, timeout.duration).asInstanceOf[List[ItemOccurences]]
+        complete(HttpEntity(ContentTypes.`application/json`, Json.obj("items" -> response).toString()))
       }
     }
   }
@@ -115,11 +127,14 @@ class ProductCatalogStorage(returnSource: ActorRef) extends Actor {
         (Util.Util.occurences(entry._1, element),
           entry._2))
      val sorted = distance_map.sortWith(_._1 > _._1)
-     val first_10 = sorted.take(10)
+     val first_10 = sorted.take(10).map(p => ItemOccurences(p._1, p._2)).toList
      log.info("Response {}", first_10)
-     returnSource ! first_10.toString()
-     sender ! first_10.toString()
-     context.parent ! first_10.toString()
+
+
+     // TODO: return a JSON here :)
+     returnSource ! first_10
+     sender ! first_10
+     context.parent ! first_10
     }
     case other => {
       log.info("Unknown message! {}", other)
@@ -130,3 +145,7 @@ class ProductCatalogStorage(returnSource: ActorRef) extends Actor {
 object ProductCatalog {
   case class GetElements(name: String)
 }
+
+case class ItemOccurences(occurence: Int, item: Item)
+
+case class ItemOccurencesList(itemsOcurrences: List[ItemOccurences])

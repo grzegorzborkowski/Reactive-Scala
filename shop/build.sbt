@@ -19,5 +19,7 @@ libraryDependencies ++= Seq(
   "org.scalatra" %% "scalatra" % "2.6.2",
   "org.http4s" %% "http4s-dsl" % "0.15.0",
   "co.fs2" %% "fs2-core" % "0.9.7",
-  "org.scalaj" % "scalaj-http_2.11" % "2.3.0")
+  "org.scalaj" % "scalaj-http_2.11" % "2.3.0",
+  "com.typesafe.akka" %% "akka-http-spray-json" % "10.0.10",
+  "com.typesafe.play" %% "play-json" % "2.6.7")
         
