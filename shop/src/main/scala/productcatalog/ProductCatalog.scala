@@ -101,6 +101,7 @@ class ProductCatalogStorage(returnSource: ActorRef) extends Actor {
     products += (item.name -> item)
   })
 
+  print(itemsInCatalog.toList.map(p => p.name.split(" ") + ","))
   def getProductCatalog(): Stream[Item] = {
     val lines = scala.io.Source.fromResource("data/data.csv").getLines
     lines.toStream.tail
@@ -123,15 +124,13 @@ class ProductCatalogStorage(returnSource: ActorRef) extends Actor {
     case GetElements(element) => {
 //      log.info("SENDER :", parent)
       log.info("Received GetElemenets query")
+      print(itemsInCatalog.map(p => p.name))
       val distance_map = products.toSeq.map(entry =>
         (Util.Util.occurences(entry._1, element),
           entry._2))
      val sorted = distance_map.sortWith(_._1 > _._1)
      val first_10 = sorted.take(10).map(p => ItemOccurences(p._1, p._2)).toList
      log.info("Response {}", first_10)
-
-
-     // TODO: return a JSON here :)
      returnSource ! first_10
      sender ! first_10
      context.parent ! first_10

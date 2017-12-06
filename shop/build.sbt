@@ -21,5 +21,6 @@ libraryDependencies ++= Seq(
   "co.fs2" %% "fs2-core" % "0.9.7",
   "org.scalaj" % "scalaj-http_2.11" % "2.3.0",
   "com.typesafe.akka" %% "akka-http-spray-json" % "10.0.10",
-  "com.typesafe.play" %% "play-json" % "2.6.7")
+  "com.typesafe.play" %% "play-json" % "2.6.7",
+  "io.gatling.highcharts" % "gatling-charts-highcharts" % "2.3.0")
         
